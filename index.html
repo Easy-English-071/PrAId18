@@ -593,7 +593,7 @@
     </div>
     
     <!-- History Modal -->
-    <div id="history-modal" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 p-4 modal-fade-in">
+    <div id="history-modal" class="fixed inset-0 bg-black/60 hidden flex items-center justify-center z-50 p-4 modal-fade-in">
         <div id="history-modal-content" class="main-card w-full max-w-2xl max-h-[80vh] flex flex-col modal-content-fade-in">
             <div class="flex justify-between items-center mb-4 flex-shrink-0">
                 <h2 class="text-2xl font-bold text-text-primary">Lịch sử Luyện tập</h2>
@@ -725,7 +725,7 @@
 
 
         // API Configuration
-        const apiKey = "AIzaSyBa0ieUPwXxb-W_fFHbB-ldEJG8-sAFxN0"; // API key will be managed by the environment
+        const apiKey = ""; // API key will be managed by the environment
         const TEXT_MODEL = "gemini-2.5-flash-preview-05-20";
         const TTS_MODEL = "gemini-2.5-flash-preview-tts";
         const TEXT_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${TEXT_MODEL}:generateContent?key=${apiKey}`;
