@@ -366,6 +366,13 @@
 
         .fade-in { animation: fadeIn 0.6s ease-out forwards; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .modal-fade-in { animation: modalFadeIn 0.3s ease-out forwards; }
+        @keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
+        
+        .modal-content-fade-in { animation: modalContentFadeIn 0.3s ease-out forwards; }
+        @keyframes modalContentFadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+
 
         /* --- Waveform --- */
         #waveform-container {
@@ -382,14 +389,55 @@
             border: 1px solid var(--border-color);
             box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3);
         }
+        
+        /* --- History Modal --- */
+        .history-item {
+            background-color: var(--layer-inset-bg);
+            border: 1px solid var(--border-color);
+            transition: all 0.2s ease-in-out;
+        }
+        .history-item:hover {
+            background-color: var(--layer-bg);
+            border-color: var(--accent-primary);
+            transform: translateX(5px);
+        }
+        .history-score {
+            width: 50px;
+            height: 50px;
+            flex-shrink: 0;
+        }
+        .history-score.score-high { border-color: var(--accent-success); color: var(--accent-success); }
+        .history-score.score-medium { border-color: var(--accent-warning); color: var(--accent-warning); }
+        .history-score.score-low { border-color: var(--accent-danger); color: var(--accent-danger); }
+        
+        /* Custom scrollbar for history list */
+        #history-list::-webkit-scrollbar {
+            width: 8px;
+        }
+        #history-list::-webkit-scrollbar-track {
+            background: var(--layer-inset-bg);
+            border-radius: 10px;
+        }
+        #history-list::-webkit-scrollbar-thumb {
+            background: var(--text-secondary);
+            border-radius: 10px;
+        }
+        #history-list::-webkit-scrollbar-thumb:hover {
+            background: var(--accent-primary);
+        }
+
     </style>
 </head>
 <body class="antialiased">
-    <div class="w-full max-w-3xl mx-auto p-4">
+    <div class="w-full max-w-3xl mx-auto p-4 relative">
         <!-- Header Section -->
         <header class="text-center mb-8 fade-in relative">
             <h1 class="text-6xl md:text-7xl font-bold font-logo">PrAI</h1>
             <p class="text-text-secondary">Trợ lý luyện phát âm AI của bạn</p>
+            <!-- History Button -->
+            <button id="history-btn" class="btn-icon absolute top-0 right-0" title="Lịch sử Luyện tập">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>
+            </button>
         </header>
 
         <!-- Main Card -->
@@ -410,7 +458,7 @@
                         </div>
                         <div class="flex-shrink-0 flex gap-3 self-end">
                             <button id="random-practice-btn" class="btn btn-secondary">
-                               <svg class="icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v6h6"/><path d="M21 12A9 9 0 0 0 6 5.3L3 8"/><path d="M21 22v-6h-6"/><path d="M3 12a9 9 0 0 0 15 6.7l3-2.7"/></svg>
+                                <svg class="icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v6h6"/><path d="M21 12A9 9 0 0 0 6 5.3L3 8"/><path d="M21 22v-6h-6"/><path d="M3 12a9 9 0 0 0 15 6.7l3-2.7"/></svg>
                                 <span class="text">Ngẫu nhiên</span>
                             </button>
                              <button id="transcribe-btn" class="btn btn-primary">
@@ -543,6 +591,25 @@
             <p>© 2025 PrAI. Được tạo ra với niềm đam mê ngôn ngữ bởi Mr Bảo.</p>
         </footer>
     </div>
+    
+    <!-- History Modal -->
+    <div id="history-modal" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 p-4 modal-fade-in">
+        <div id="history-modal-content" class="main-card w-full max-w-2xl max-h-[80vh] flex flex-col modal-content-fade-in">
+            <div class="flex justify-between items-center mb-4 flex-shrink-0">
+                <h2 class="text-2xl font-bold text-text-primary">Lịch sử Luyện tập</h2>
+                <button id="close-history-btn" class="btn-icon text-2xl leading-none">
+                    &times;
+                </button>
+            </div>
+            <div id="history-list" class="overflow-y-auto space-y-3 pr-2 flex-grow">
+                <!-- History items will be injected here -->
+            </div>
+             <div id="clear-history-btn-container" class="text-center mt-4 flex-shrink-0">
+                <button id="clear-history-btn" class="btn btn-secondary">Xóa Lịch sử</button>
+            </div>
+        </div>
+    </div>
+
 
     <script type="module">
         // DOM Elements
@@ -583,6 +650,14 @@
         const thoughtGroupTooltip = document.getElementById('thought-group-tooltip');
         const thoughtGroupAnalysisResult = document.getElementById('thought-group-analysis-result');
         const thoughtGroupFeedback = document.getElementById('thought-group-feedback');
+        
+        // History Modal Elements
+        const historyBtn = document.getElementById('history-btn');
+        const historyModal = document.getElementById('history-modal');
+        const historyModalContent = document.getElementById('history-modal-content');
+        const closeHistoryBtn = document.getElementById('close-history-btn');
+        const historyList = document.getElementById('history-list');
+        const clearHistoryBtn = document.getElementById('clear-history-btn');
 
 
         // State variables
@@ -608,6 +683,7 @@
         let progressInterval;
         let progressTextInterval;
         let currentThoughtGroups = [];
+        let currentIpaData = {}; // To store IPA data for history
 
         // --- DATA & CONFIG ---
         const funFacts = [
@@ -741,33 +817,33 @@
         // --- API & CORE LOGIC ---
 
         async function fetchWithBackoff(url, options, maxRetries = 4) {
-              let delay = 1000;
-              for (let i = 0; i < maxRetries; i++) {
-                  try {
-                      const response = await fetch(url, options);
-                      if (response.status === 429 || response.status >= 500) {
-                          if (i === maxRetries - 1) {
-                              const errorBody = await response.json().catch(() => ({}));
-                              throw new Error(`API Error: ${response.status}. ${errorBody.error?.message || 'Server error after multiple retries.'}`);
-                          }
-                          await new Promise(resolve => setTimeout(resolve, delay));
-                          delay *= 2; 
-                          continue; 
-                      }
-                      if (!response.ok) {
-                           const errorBody = await response.json().catch(() => ({}));
-                           throw new Error(`API Error: ${response.status}. ${errorBody.error?.message || 'An unknown error occurred.'}`);
-                      }
-                      return await response.json();
-                  } catch (error) {
-                      if (i === maxRetries - 1) {
-                          throw error;
-                      }
-                      await new Promise(resolve => setTimeout(resolve, delay));
-                      delay *= 2;
-                  }
-              }
-          }
+             let delay = 1000;
+             for (let i = 0; i < maxRetries; i++) {
+                 try {
+                     const response = await fetch(url, options);
+                     if (response.status === 429 || response.status >= 500) {
+                         if (i === maxRetries - 1) {
+                             const errorBody = await response.json().catch(() => ({}));
+                             throw new Error(`API Error: ${response.status}. ${errorBody.error?.message || 'Server error after multiple retries.'}`);
+                         }
+                         await new Promise(resolve => setTimeout(resolve, delay));
+                         delay *= 2; 
+                         continue; 
+                     }
+                     if (!response.ok) {
+                         const errorBody = await response.json().catch(() => ({}));
+                         throw new Error(`API Error: ${response.status}. ${errorBody.error?.message || 'An unknown error occurred.'}`);
+                     }
+                     return await response.json();
+                 } catch (error) {
+                     if (i === maxRetries - 1) {
+                         throw error;
+                     }
+                     await new Promise(resolve => setTimeout(resolve, delay));
+                     delay *= 2;
+                 }
+             }
+         }
 
         function startIpaLoadingAnimation() {
             clearInterval(ipaLoadingInterval);
@@ -834,6 +910,13 @@
 
                 const resultText = response.candidates[0].content.parts[0].text;
                 const resultJson = JSON.parse(resultText);
+                
+                // Store data for history
+                currentIpaData = {
+                    simple: resultJson.simple,
+                    detailed: resultJson.detailed,
+                    thought_groups: resultJson.thought_groups
+                };
 
                 standardIPA = resultJson.detailed;
                 ipaForText = text;
@@ -1006,7 +1089,7 @@
 
 
         async function analyzeAudio(audioBlob) {
-            const currentAnalysisID = analysisRequestID; // Capture the ID for this specific analysis task.
+            const currentAnalysisID = analysisRequestID;
 
             if (!audioBlob) return;
             lastRecordingBlob = audioBlob;
@@ -1030,7 +1113,6 @@
             const reader = new FileReader();
             reader.readAsDataURL(lastRecordingBlob);
             reader.onloadend = async () => {
-                // Check if this analysis request has been cancelled by a newer one.
                 if (currentAnalysisID !== analysisRequestID) {
                     console.log(`Analysis request ${currentAnalysisID} cancelled by new request ${analysisRequestID}.`);
                     loader.classList.add('hidden');
@@ -1044,7 +1126,7 @@
                 const isSentence = textInput.value.trim().includes(' ');
                 
                 const prompt = {
-                    "role": "You are PrAI, a world-class phonetician and AI speech analyst. Your primary function is to provide **scientifically rigorous, brutally honest, yet constructive** feedback to a Vietnamese learner of English. Accuracy is paramount.",
+                    "role": "You are PrAI, an expert and empathetic AI phonetics coach. Your primary function is to provide **scientifically rigorous, accurate, and highly constructive** feedback to a Vietnamese learner of English. Your goal is to be an encouraging guide, balancing strict accuracy with an understanding of the learning process.",
                     "context": {
                         "text_to_pronounce": textInput.value.trim(),
                         "target_accent": accentSelect.value === 'American English' ? 'AmE' : 'BrE',
@@ -1052,29 +1134,30 @@
                         "ideal_thought_groups": currentThoughtGroups.join(' / '),
                         "is_sentence": isSentence,
                         "phonetic_guidelines": {
-                            "instruction": "Your feedback must be direct, precise, and actionable. While maintaining a supportive tone (addressing the user as 'bạn'), do not sacrifice accuracy for the sake of being overly gentle. **Your #1 priority is to correctly identify pronunciation errors.**",
+                            "instruction": "Your feedback must be direct, precise, and actionable. Maintain a supportive and encouraging tone (addressing the user as 'bạn'). Your goal is to build confidence while correcting errors. **While your #1 priority is accuracy, distinguish between critical errors that hinder communication and minor imperfections.** Frame your feedback positively. For example, instead of 'That's wrong,' say 'Bạn đã làm rất tốt phần đầu của âm này! Để hoàn thiện hơn, hãy thử...'. Crucially, your analysis MUST be based on the provided `standard_ipa`, which represents natural connected speech. Do not deviate from this standard.",
                             "critical_error_focus": {
                                 "vowel_quality": "Be extremely critical of vowel sounds based on their phonetic features (height, backness, roundedness, and length).",
-                                "diphthong_vs_monophthong": "A common error for Vietnamese speakers is replacing English diphthongs with monophthongs. For example, in 'home' /hoʊm/, the /oʊ/ sound is crucial. Pronouncing it as /o/ (like Vietnamese 'ô') is a major error and MUST be marked 'incorrect'. Similarly, for 'plane' /pleɪn/, the /eɪ/ sound is not /e/ (like Vietnamese 'ê'). Mark these substitutions as 'incorrect'.",
+                                "diphthong_vs_monophthong": "A common error for Vietnamese speakers is replacing English diphthongs with monophthongs. For example, in 'home' /hoʊm/, the /oʊ/ sound is a clear diphthong, not the Vietnamese monophthong 'ô'. Pronouncing it as a single vowel sound is a major error and MUST be marked 'incorrect'. Similarly, for 'plane' /pleɪn/, the /eɪ/ sound is not the Vietnamese 'ê'. Mark these substitutions as 'incorrect' and explain the gliding motion of the diphthong.",
                                 "confusable_vowel_pairs": [
                                     { "pair": "/ʊ/ vs /uː/", "description": "Distinguish VERY carefully between the short, lax, less rounded vowel /ʊ/ (as in 'book', 'put') and the long, tense, more rounded vowel /uː/ (as in 'blue', 'food'). A Vietnamese speaker might pronounce /ʊ/ with too much lip rounding and tension, making it sound like /uː/. This is a significant error. Provide specific feedback about lip rounding and muscle tension." },
                                     { "pair": "/ɪ/ vs /iː/", "description": "Distinguish between the short, lax /ɪ/ (as in 'ship', 'it') and the long, tense /iː/ (as in 'sheep', 'eat'). Feedback should mention tongue position (less high for /ɪ/) and length." },
                                     { "pair": "/æ/ vs /e/", "description": "Distinguish between the open front /æ/ (as in 'cat', 'apple') which requires an open jaw, and the mid-front /e/ (as in 'bed', 'said')." }
                                 ],
                                 "final_consonants": "Vietnamese speakers often drop or weaken final consonants. A word like 'home' /hoʊm/ without a clear /m/ sound is incorrect. 'Like' /laɪk/ without a final /k/ is incorrect. Be very strict in detecting this.",
-                                "voicing": "Pay close attention to the distinction between voiced (/b/, /d/, /g/, /v/, /z/, /ð/, /ʒ/) and voiceless (/p/, /t/, /k/, /f/, /s/, /θ/, /ʃ/) consonants, especially at the end of words."
+                                "voicing": "Pay close attention to the distinction between voiced (/b/, /d/, /g/, /v/, /z/, /ð/, /ʒ/) and voiceless (/p/, /t/, /k/, /f/, /s/, /θ/, /ʃ/) consonants, especially at the end of words.",
+                                "aspiration": "Note the lack of aspiration in initial voiceless stops (/p/, /t/, /k/). For example, 'pen' should have a puff of air, which might be missing."
                             }
                         }
                     },
                     "task": `Perform a multi-step, high-fidelity analysis of the user's audio.
                     1.  **Initial Transcription:** First, internally transcribe the user's speech into an IPA string. This is your 'user_ipa'.
                     2.  **Phoneme-by-Phoneme Comparison (Strict):** Compare your 'user_ipa' to the 'standard_ipa' phoneme by phoneme. The 'phoneme_analysis' array MUST contain an object for each phoneme from the standard_ipa, in order.
-                        -   **'correct'**: Only if the user's phoneme is a near-perfect match for the target accent.
-                        -   **'approximate'**: If the phoneme is intelligible but deviates slightly in quality (e.g., a slightly different vowel position). Use this sparingly.
-                        -   **'incorrect'**: If the phoneme is wrong. This includes errors from the 'critical_error_focus' section. Provide clear, concise feedback explaining *why* it's incorrect based on phonetic features (e.g., "Âm /ʊ/ của bạn hơi căng và tròn môi quá, nghe gần giống /uː/. Hãy thử thả lỏng môi và phát âm ngắn hơn.").
+                        -   **'correct'**: The phoneme is a clear and accurate match for the target accent.
+                        -   **'approximate'**: The phoneme is easily intelligible and very close to the target, but with a minor deviation that doesn't significantly impact understanding. Use this to acknowledge good effort that is almost perfect. For example, a vowel that is slightly off in length but correct in quality.
+                        -   **'incorrect'**: The phoneme is mispronounced in a way that could lead to misunderstanding. This includes all errors listed in the 'critical_error_focus' section. Provide clear, concise feedback explaining *why* it's incorrect based on phonetic features (e.g., "Âm /ʊ/ của bạn hơi căng và tròn môi quá, nghe gần giống /uː/. Hãy thử thả lỏng môi và phát âm ngắn hơn.").
                     3.  **Scoring:** Calculate the 'overall_score' (0-100). This score MUST be heavily weighted by the phoneme analysis. Critical errors (vowel quality, final consonants, diphthongs) should significantly lower the score. A single critical error should prevent the score from being above 80. Multiple critical errors should result in a much lower score.
                     4.  **Holistic Analysis (if sentence):** Analyze stress, intonation, and thought groups. The feedback should be as precise as the phoneme analysis.
-                    5.  **Final Review:** Before generating the JSON, review your analysis. Ask yourself: "Did I strictly follow the 'critical_error_focus' guidelines? If the user said /bʊk/ for 'book' but it sounded like /buːk/, did I correctly mark /ʊ/ as 'incorrect' and provide specific feedback on lip rounding and tension?"
+                    5.  **Final Review & Self-Correction:** Before generating the JSON, review your analysis. Ask yourself: "Did I strictly follow the 'critical_error_focus' guidelines? If the user said /bʊk/ for 'book' but it sounded like /buːk/, did I correctly mark /ʊ/ as 'incorrect' and provide specific feedback on lip rounding and tension? Is the feedback specific enough for a Vietnamese learner? Is the score a true reflection of the performance, penalizing critical errors heavily?" Correct any inconsistencies before finalizing the output.
                     Return the result in the specified JSON format.`,
                     "output_format_instruction": {
                         "format": "JSON",
@@ -1107,6 +1190,7 @@
                     const resultText = data.candidates[0].content.parts[0].text;
                     const resultJson = JSON.parse(resultText);
                     displayResults(resultJson);
+                    savePracticeSession(resultJson, currentIpaData);
                 } catch (error) {
                     if (currentAnalysisID === analysisRequestID) {
                         handleApiError(error);
@@ -1234,6 +1318,115 @@
                 practiceSuggestions.classList.add('hidden');
             }
         }
+        
+        // --- HISTORY FUNCTIONS ---
+        
+        function savePracticeSession(analysisData, ipaData) {
+            if (!analysisData || analysisData.overall_score === null) return;
+
+            const session = {
+                id: Date.now(),
+                text: textInput.value.trim(),
+                accent: accentSelect.value,
+                date: new Date().toISOString(),
+                score: analysisData.overall_score,
+                analysisData: analysisData,
+                ipaData: ipaData
+            };
+            
+            let history = JSON.parse(localStorage.getItem('prAIHistory')) || [];
+            history.unshift(session); // Add to the beginning
+            
+            // Limit history size to 30 items
+            if (history.length > 30) {
+                history = history.slice(0, 30);
+            }
+            
+            localStorage.setItem('prAIHistory', JSON.stringify(history));
+        }
+        
+        function loadAndShowHistory() {
+            historyList.innerHTML = '';
+            const history = JSON.parse(localStorage.getItem('prAIHistory')) || [];
+            
+            if (history.length === 0) {
+                historyList.innerHTML = `<p class="text-text-secondary text-center p-4">Chưa có lịch sử luyện tập nào.</p>`;
+                clearHistoryBtn.classList.add('hidden');
+                return;
+            }
+            
+            clearHistoryBtn.classList.remove('hidden');
+            history.forEach(session => {
+                const item = document.createElement('div');
+                item.className = 'history-item p-3 rounded-lg flex items-center gap-4 cursor-pointer';
+                item.dataset.sessionId = session.id;
+                
+                let scoreClass = 'score-low';
+                if (session.score > 85) scoreClass = 'score-high';
+                else if (session.score > 70) scoreClass = 'score-medium';
+                
+                const date = new Date(session.date);
+                const formattedDate = `${date.toLocaleDateString('vi-VN')} ${date.toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit'})}`;
+
+                item.innerHTML = `
+                    <div class="history-score border-2 ${scoreClass} rounded-full flex items-center justify-center font-bold text-lg">
+                        ${session.score}
+                    </div>
+                    <div class="flex-grow min-w-0">
+                        <p class="font-semibold text-text-primary truncate">${session.text}</p>
+                        <p class="text-sm text-text-secondary">${formattedDate} - ${session.accent}</p>
+                    </div>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-text-secondary flex-shrink-0"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                `;
+                
+                item.addEventListener('click', () => loadSessionFromHistory(session.id));
+                historyList.appendChild(item);
+            });
+        }
+        
+        function loadSessionFromHistory(sessionId) {
+            const history = JSON.parse(localStorage.getItem('prAIHistory')) || [];
+            const session = history.find(s => s.id == sessionId);
+            
+            if (!session) {
+                showMessage('Không tìm thấy buổi luyện tập này.', 'error');
+                return;
+            }
+            
+            // Reset UI
+            resetAll();
+            
+            // Populate UI with session data
+            textInput.value = session.text;
+            accentSelect.value = session.accent;
+            charCounter.textContent = `${session.text.length} / 150`;
+
+            // Restore IPA data
+            standardIPA = session.ipaData.detailed;
+            ipaForText = session.text;
+            document.body.dataset.accent = session.accent;
+            currentThoughtGroups = session.ipaData.thought_groups.groups;
+            currentIpaData = session.ipaData;
+            
+            simpleIpaText.textContent = session.ipaData.simple;
+            detailedIpaText.textContent = session.ipaData.detailed;
+            displayThoughtGroups(session.ipaData.thought_groups.groups, session.ipaData.thought_groups.explanation);
+
+            // Show controls and results
+            controlsSection.classList.remove('hidden');
+            displayResults(session.analysisData);
+            
+            // Close modal
+            historyModal.classList.add('hidden');
+        }
+        
+        function clearHistory() {
+            if (confirm('Bạn có chắc chắn muốn xóa toàn bộ lịch sử luyện tập không?')) {
+                localStorage.removeItem('prAIHistory');
+                loadAndShowHistory();
+                showMessage('Đã xóa lịch sử luyện tập.', 'success');
+            }
+        }
 
         // --- UI & EVENT HANDLERS ---
 
@@ -1258,6 +1451,7 @@
             lastTTSTextClear = '';
             lastTTSAccentClear = '';
             currentThoughtGroups = [];
+            currentIpaData = {};
             displayThoughtGroups([], '');
         }
 
@@ -1418,6 +1612,20 @@
             showMoreBtn.addEventListener('click', toggleAdvancedAnalysis);
             randomPracticeBtn.addEventListener('click', handleRandomPractice);
             uploadBtn.addEventListener('click', () => audioUploadInput.click());
+            
+            // History Modal Listeners
+            historyBtn.addEventListener('click', () => {
+                loadAndShowHistory();
+                historyModal.classList.remove('hidden');
+            });
+            closeHistoryBtn.addEventListener('click', () => historyModal.classList.add('hidden'));
+            clearHistoryBtn.addEventListener('click', clearHistory);
+            historyModal.addEventListener('click', (e) => {
+                if (e.target === historyModal) {
+                    historyModal.classList.add('hidden');
+                }
+            });
+
 
             audioUploadInput.addEventListener('change', (event) => {
                 const file = event.target.files[0];
@@ -1425,8 +1633,8 @@
                     const ipaReadyCheck = async () => {
                         let ipaReady = (ipaForText === textInput.value.trim() && accentSelect.value === document.body.dataset.accent);
                         if (!textInput.value.trim()) {
-                             showMessage('Vui lòng nhập văn bản tương ứng với file âm thanh trước.', 'warning');
-                             return;
+                            showMessage('Vui lòng nhập văn bản tương ứng với file âm thanh trước.', 'warning');
+                            return;
                         }
                         if (!ipaReady) {
                             ipaReady = await fetchAndDisplayIPA();
