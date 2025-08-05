@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PrAI - Luyện Phát Âm với AI</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%23242D38'/%3E%3Ctext x='50' y='68' font-family='Exo 2, sans-serif' font-size='50' font-weight='bold' text-anchor='middle' fill='%234A80F0'%3EPr%3Ctspan fill='%23EAEFF5'%3EAI%3C/tspan%3E%3C/text%3E%3C/svg%3E">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%23242D38'/%3E%3Ctext x='50' y='70' font-family='Exo 2, sans-serif' font-size='50' font-weight='bold' text-anchor='middle' fill='%234A80F0'%3EPr%3Ctspan fill='%23EAEFF5'%3EAI%3C/tspan%3E%3C/text%3E%3C/svg%3E">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -604,6 +604,7 @@
         let lastTTSTextClear = '';
         let lastTTSAccentClear = '';
         let fetchIpaRequestID = 0;
+        let analysisRequestID = 0; // <-- New state for cancelling analysis
         let progressInterval;
         let progressTextInterval;
         let currentThoughtGroups = [];
@@ -1005,6 +1006,8 @@
 
 
         async function analyzeAudio(audioBlob) {
+            const currentAnalysisID = analysisRequestID; // Capture the ID for this specific analysis task.
+
             if (!audioBlob) return;
             lastRecordingBlob = audioBlob;
             listenAgainBtn.disabled = false;
@@ -1027,11 +1030,21 @@
             const reader = new FileReader();
             reader.readAsDataURL(lastRecordingBlob);
             reader.onloadend = async () => {
+                // Check if this analysis request has been cancelled by a newer one.
+                if (currentAnalysisID !== analysisRequestID) {
+                    console.log(`Analysis request ${currentAnalysisID} cancelled by new request ${analysisRequestID}.`);
+                    loader.classList.add('hidden');
+                    funFactEl.classList.add('hidden');
+                    stopProgressSimulation();
+                    stopProgressTextAnimation();
+                    return; 
+                }
+
                 const base64Audio = reader.result.split(',')[1];
                 const isSentence = textInput.value.trim().includes(' ');
                 
                 const prompt = {
-                    "role": "You are PrAI, a world-class phonetician...",
+                    "role": "You are PrAI, a world-class phonetician and AI speech analyst. Your primary function is to provide **scientifically rigorous, brutally honest, yet constructive** feedback to a Vietnamese learner of English. Accuracy is paramount.",
                     "context": {
                         "text_to_pronounce": textInput.value.trim(),
                         "target_accent": accentSelect.value === 'American English' ? 'AmE' : 'BrE',
@@ -1039,20 +1052,29 @@
                         "ideal_thought_groups": currentThoughtGroups.join(' / '),
                         "is_sentence": isSentence,
                         "phonetic_guidelines": {
-                            "instruction": "Your feedback must be gentle, encouraging, detailed, positive, and constructive. It must be scientifically rigorous and natural-sounding. **Crucially, you must always address the user as 'bạn' and never as 'con'.**",
-                            "vietnamese_learner_focus": [
-                                "Pay special attention to common Vietnamese L1 interference patterns: final consonant deletion, incorrect vowel length, difficulty with consonant clusters, and a syllable-timed rhythm.",
-                                "Analyze connected speech phenomena (assimilation, elision, linking) *within* thought groups.",
-                                "Crucially, a pause *between* thought groups breaks the phonetic link. Your analysis must reflect this."
-                            ]
+                            "instruction": "Your feedback must be direct, precise, and actionable. While maintaining a supportive tone (addressing the user as 'bạn'), do not sacrifice accuracy for the sake of being overly gentle. **Your #1 priority is to correctly identify pronunciation errors.**",
+                            "critical_error_focus": {
+                                "vowel_quality": "Be extremely critical of vowel sounds based on their phonetic features (height, backness, roundedness, and length).",
+                                "diphthong_vs_monophthong": "A common error for Vietnamese speakers is replacing English diphthongs with monophthongs. For example, in 'home' /hoʊm/, the /oʊ/ sound is crucial. Pronouncing it as /o/ (like Vietnamese 'ô') is a major error and MUST be marked 'incorrect'. Similarly, for 'plane' /pleɪn/, the /eɪ/ sound is not /e/ (like Vietnamese 'ê'). Mark these substitutions as 'incorrect'.",
+                                "confusable_vowel_pairs": [
+                                    { "pair": "/ʊ/ vs /uː/", "description": "Distinguish VERY carefully between the short, lax, less rounded vowel /ʊ/ (as in 'book', 'put') and the long, tense, more rounded vowel /uː/ (as in 'blue', 'food'). A Vietnamese speaker might pronounce /ʊ/ with too much lip rounding and tension, making it sound like /uː/. This is a significant error. Provide specific feedback about lip rounding and muscle tension." },
+                                    { "pair": "/ɪ/ vs /iː/", "description": "Distinguish between the short, lax /ɪ/ (as in 'ship', 'it') and the long, tense /iː/ (as in 'sheep', 'eat'). Feedback should mention tongue position (less high for /ɪ/) and length." },
+                                    { "pair": "/æ/ vs /e/", "description": "Distinguish between the open front /æ/ (as in 'cat', 'apple') which requires an open jaw, and the mid-front /e/ (as in 'bed', 'said')." }
+                                ],
+                                "final_consonants": "Vietnamese speakers often drop or weaken final consonants. A word like 'home' /hoʊm/ without a clear /m/ sound is incorrect. 'Like' /laɪk/ without a final /k/ is incorrect. Be very strict in detecting this.",
+                                "voicing": "Pay close attention to the distinction between voiced (/b/, /d/, /g/, /v/, /z/, /ð/, /ʒ/) and voiceless (/p/, /t/, /k/, /f/, /s/, /θ/, /ʃ/) consonants, especially at the end of words."
+                            }
                         }
                     },
-                    "task": `First, determine if the audio contains discernible English speech. If not, set 'speech_detected' to false and return. If speech is detected, perform a scientifically rigorous analysis.
-                    1.  **Phoneme Analysis (Strict):** You MUST analyze every single phoneme from the 'standard_ipa'. The 'phoneme_analysis' array MUST contain an object for each phoneme, in the exact same order.
-                    2.  **Scoring:** Provide an 'overall_score' (0-100).
-                    3.  **Thought Group Analysis (if sentence):** Analyze the user's pausing and rhythm. Provide feedback in a friendly, human-like tone. Instead of just stating correctness, explain *why* a certain grouping sounds more natural. For example: 'Bạn đã ngắt nghỉ rất tốt! Việc nhóm 'a piece of cake' lại với nhau giúp câu nói nghe liền mạch và tự nhiên hơn nhiều.' If the user's grouping is different but still makes sense, acknowledge it as a valid alternative for emphasis.
-                    4.  **Other Analysis & Feedback:** Analyze stress, and, if it's a sentence, intonation and connected speech.
-                    5.  **Mandatory Detailed Feedback:** For sentences, **always** provide feedback for 'advanced_analysis'.
+                    "task": `Perform a multi-step, high-fidelity analysis of the user's audio.
+                    1.  **Initial Transcription:** First, internally transcribe the user's speech into an IPA string. This is your 'user_ipa'.
+                    2.  **Phoneme-by-Phoneme Comparison (Strict):** Compare your 'user_ipa' to the 'standard_ipa' phoneme by phoneme. The 'phoneme_analysis' array MUST contain an object for each phoneme from the standard_ipa, in order.
+                        -   **'correct'**: Only if the user's phoneme is a near-perfect match for the target accent.
+                        -   **'approximate'**: If the phoneme is intelligible but deviates slightly in quality (e.g., a slightly different vowel position). Use this sparingly.
+                        -   **'incorrect'**: If the phoneme is wrong. This includes errors from the 'critical_error_focus' section. Provide clear, concise feedback explaining *why* it's incorrect based on phonetic features (e.g., "Âm /ʊ/ của bạn hơi căng và tròn môi quá, nghe gần giống /uː/. Hãy thử thả lỏng môi và phát âm ngắn hơn.").
+                    3.  **Scoring:** Calculate the 'overall_score' (0-100). This score MUST be heavily weighted by the phoneme analysis. Critical errors (vowel quality, final consonants, diphthongs) should significantly lower the score. A single critical error should prevent the score from being above 80. Multiple critical errors should result in a much lower score.
+                    4.  **Holistic Analysis (if sentence):** Analyze stress, intonation, and thought groups. The feedback should be as precise as the phoneme analysis.
+                    5.  **Final Review:** Before generating the JSON, review your analysis. Ask yourself: "Did I strictly follow the 'critical_error_focus' guidelines? If the user said /bʊk/ for 'book' but it sounded like /buːk/, did I correctly mark /ʊ/ as 'incorrect' and provide specific feedback on lip rounding and tension?"
                     Return the result in the specified JSON format.`,
                     "output_format_instruction": {
                         "format": "JSON",
@@ -1076,18 +1098,28 @@
 
                 try {
                     const data = await fetchWithBackoff(TEXT_API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                    
+                    if (currentAnalysisID !== analysisRequestID) {
+                        console.log(`Analysis request ${currentAnalysisID} completed, but a newer request is active. Discarding results.`);
+                        return;
+                    }
+
                     const resultText = data.candidates[0].content.parts[0].text;
                     const resultJson = JSON.parse(resultText);
                     displayResults(resultJson);
                 } catch (error) {
-                    handleApiError(error);
+                    if (currentAnalysisID === analysisRequestID) {
+                        handleApiError(error);
+                    }
                 } finally {
-                    stopProgressSimulation();
-                    stopProgressTextAnimation();
-                    setTimeout(() => {
-                        loader.classList.add('hidden');
-                        funFactEl.classList.add('hidden');
-                    }, 500);
+                    if (currentAnalysisID === analysisRequestID) {
+                        stopProgressSimulation();
+                        stopProgressTextAnimation();
+                        setTimeout(() => {
+                            loader.classList.add('hidden');
+                            funFactEl.classList.add('hidden');
+                        }, 500);
+                    }
                 }
             };
         }
@@ -1235,6 +1267,8 @@
                 return;
             }
             
+            analysisRequestID++; // Invalidate any previous, ongoing analysis.
+
             if (!textInput.value.trim()) {
                 showMessage('Vui lòng nhập từ để ghi âm và phân tích.', 'warning');
                 return;
@@ -1401,6 +1435,7 @@
                             showMessage('Không thể phân tích vì không lấy được phiên âm chuẩn.', 'error');
                             return;
                         }
+                        analysisRequestID++; // Invalidate previous analyses before starting a new one from file upload
                         analyzeAudio(file);
                     };
                     ipaReadyCheck();
